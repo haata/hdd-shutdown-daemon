@@ -1,0 +1,104 @@
+#!/bin/bash
+#| Checks the AC_POWER every 10 seconds.
+#| If there is no power for 2 minutes then: un-mount(stop httpd, nfsd, samba), stop RAID 1
+#| Then initiate RAID 1 and re-mount(start httpd, nfsd, samba) if power is then detected
+
+#| Install into /usr/local/bin for use with the rc.d script
+
+## Configuration Parameters
+AC_ADAPTOR=/proc/acpi/ac_adapter/AC/state
+ON="on-line"
+OFF="off-line"
+RAID_DRIVE=/dev/md0
+MOUNT_DIR=/mnt/Starm
+
+CHECK_INTERVAL=10     # In seconds
+POWER_DOWN_TIME=120   # In seconds
+
+ # Debug Intervals
+#CHECK_INTERVAL=1     # In seconds
+#POWER_DOWN_TIME=4   # In seconds
+
+
+## Variables Used Internally
+TIME_OFF=0            # In seconds
+HDD_ON=0              # True/false (0/1)
+
+
+## Functions
+powerDetect () {
+	# Takes parameter to search for
+	# ie. searches for "on-line" in the AC state file, and returns 0 if found 1 otherwise
+	grep -q $1 $AC_ADAPTOR
+	return $?
+}
+
+services () {
+	# These commands are run as root, be careful
+	if [ $1 = "on" ]; then
+		mdadm --assemble $RAID_DRIVE    &> /dev/null
+		sleep 1
+		# The HDDs need a little bit of spin-up time
+		mount $RAID_DRIVE $MOUNT_DIR    &> /dev/null
+		sleep 1
+		/etc/rc.d/httpd start           &> /dev/null
+		/etc/rc.d/nfsd start            &> /dev/null
+		/etc/rc.d/samba start           &> /dev/null
+
+		# Debug
+		#echo ON
+	fi
+
+	if [ $1 = "off" ]; then
+		/etc/rc.d/httpd stop            &> /dev/null
+		/etc/rc.d/nfsd stop             &> /dev/null
+		/etc/rc.d/samba stop            &> /dev/null
+		umount $RAID_DRIVE              &> /dev/null
+		mdadm --misc --stop $RAID_DRIVE &> /dev/null
+
+		# Debug
+		#echo OFF
+	fi
+}
+
+
+## Execution Loop
+while [ 0 ]; do
+	sleep $CHECK_INTERVAL
+
+	powerDetect $ON
+
+	# Debug - Inverse
+	#powerDetect $OFF
+
+	if [ $? -gt 0 ]; then
+		# No power detected, inc counter
+		TIME_OFF=$[$TIME_OFF+$CHECK_INTERVAL]
+
+		# Initiate HDD protection once count has been reached 
+		#  but only once
+		if [ $HDD_ON -eq 0 -a $TIME_OFF -ge $POWER_DOWN_TIME ]; then
+			HDD_ON=1
+			services off
+		fi
+
+		# Debug
+		#echo No Power...
+	else
+		# Power detected, reset timer
+		TIME_OFF=0 
+
+		# Restart HDDs and the services if the drives had been turned off
+		#  but only once
+		if [ $HDD_ON -eq 1 ]; then
+			HDD_ON=0
+			services on
+		fi
+
+		#Debug 
+		#echo Power!
+	fi
+done
+
+exit 0
+

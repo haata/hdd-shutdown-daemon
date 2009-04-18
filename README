@@ -1,0 +1,16 @@
+I wrote this for a server that I wouldn't be managing in person anymore.
+It has a UPS for its external HDDs but getting signals from the UPS is a slight pain.
+So I wrote a timer based off of the ACPI for the Laptop (the server is a laptop).
+
+I also wrote a daemon script for Arch Linux for easy on/off.
+
+
+
+
+Copyright (C) Jacob Alexander
+
+Feel free to modify it and use it for your own purposes.
+
+April 17 2009
+
+

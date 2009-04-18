@@ -1,0 +1,42 @@
+#!/bin/bash
+
+# rc.d for Arch Linux
+
+#| UPS Battery Daemon for using Power Detection of a Laptop Circuit
+#| ie. Too lazy to use the UPS power management (need to write a driver...)
+
+. /etc/rc.conf
+. /etc/rc.d/functions
+
+case "$1" in
+	start)
+		stat_busy "Starting HDD Power Protection Daemon"
+		/usr/local/bin/ac_check & &> /dev/null
+		if [ $? -gt 0 ]; then
+			stat_fail
+		else
+			add_daemon ac_check
+			stat_done
+		fi
+	;;
+	stop)
+		stat_busy "Stopping HDD Power Protection Daemon"
+		pkill ac_check
+		if [ $? -gt 0 ]; then
+			stat_fail
+		else
+			rm_daemon ac_check
+			stat_done
+		fi
+	;;
+	restart)
+		$0 stop
+		sleep 1
+		$0 start
+	;;
+	*)
+		echo "usage: $0 {start|stop|restart}"
+esac
+
+exit 0
+
